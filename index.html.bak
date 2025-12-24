@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>刮刮乐 · Scratch Card</title>
+  <style>
+    :root{--bg:#0f1724;--card:#1b2430;--accent:#ffd166;--muted:#93a3b6}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#081226,#071022);color:#e8f0ff;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{width:420px;padding:28px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+    h1{margin:0 0 8px;font-size:18px}
+    p{margin:0 0 16px;color:var(--muted);font-size:13px}
+    .card{position:relative;background:linear-gradient(180deg,#0f1724,#0b1220);border-radius:8px;padding:18px;color:#fff;overflow:hidden}
+    .prize{min-height:100px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700}
+    canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:8px;touch-action:none}
+    .controls{display:flex;gap:8px;margin-top:12px}
+    .btn{background:rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px;color:var(--muted);cursor:pointer;border:1px solid rgba(255,255,255,0.03)}
+    .btn.primary{background:linear-gradient(90deg,#ff9f1c,#ffd166);color:#0b1220;font-weight:700}
+    .status{margin-top:10px;color:var(--muted);font-size:13px}
+    .hint{margin-top:8px;font-size:12px;color:#9fb3c8}
+    @media (max-width:480px){.wrap{width:92vw;padding:18px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>刮刮乐</h1>
+    <p>用鼠标或手指来刮开覆盖层，看看能否刮中大奖！</p>
+    <div class="card" id="card">
+      <div class="prize" id="prize">🎉 恭喜！中奖：<span id="prizeText">待揭晓</span></div>
+      <canvas id="mask"></canvas>
+    </div>
+    <div class="controls">
+      <button class="btn" id="reset">重新生成</button>
+      <button class="btn primary" id="reveal">立即揭晓</button>
+    </div>
+    <div class="status" id="status">已刮开：0%</div>
+    <div class="hint">提示：通过滑动或点击并移动来刮开覆盖层，达到 60% 后自动揭示全部。</div>
+  </div>
+
+  <script>
+    // 可配置奖项（文本或 Emoji）
+    const PRIZES = [
+      '再接再厉：免费咖啡一杯 ☕',
+      '幸运奖：优惠券 10% 🎟️',
+      '二等奖：价值 50 元代金券 💳',
+      '一等奖：智能手表 🎁',
+      '特等奖：MacBook Pro 💻',
+      '摸到空白：再试一次 😊'
+    ];
+
+    // 元素
+    const prizeText = document.getElementById('prizeText');
+    const canvas = document.getElementById('mask');
+    const card = document.getElementById('card');
+    const status = document.getElementById('status');
+    const resetBtn = document.getElementById('reset');
+    const revealBtn = document.getElementById('reveal');
+
+    // 随机选项
+    function pickPrize(){
+      const p = PRIZES[Math.floor(Math.random()*PRIZES.length)];
+      prizeText.textContent = p;
+    }
+
+    // 画布与遮罩
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    let revealed = false;
+
+    function resizeCanvas(){
+      // 使 canvas 与卡片尺寸一致（考虑 devicePixelRatio）
+      const rect = card.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      ctx.scale(dpr, dpr);
+      fillMask();
+    }
+
+    function fillMask(){
+      // 涂满一层金属铝灰+纹理，覆盖奖项
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // 银色渐变
+      const g = ctx.createLinearGradient(0,0,w, h);
+      g.addColorStop(0,'#bfc7cc');
+      g.addColorStop(0.5,'#9da5aa');
+      g.addColorStop(1,'#bfc7cc');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,w,h);
+
+      // 顶部纹理 - 微小噪点
+      const imgData = ctx.getImageData(0,0,w,h);
+      for(let i=0;i<imgData.data.length;i+=4){
+        const v = Math.random() * 20 - 10;
+        imgData.data[i] = Math.max(180, Math.min(255, imgData.data[i] + v));
+        imgData.data[i+1] = Math.max(180, Math.min(255, imgData.data[i+1] + v));
+        imgData.data[i+2] = Math.max(180, Math.min(255, imgData.data[i+2] + v));
+      }
+      ctx.putImageData(imgData,0,0);
+
+      // 文字提示
+      ctx.fillStyle = 'rgba(20,20,20,0.12)';
+      ctx.font = 'bold 18px system-ui,Segoe UI,Roboto';
+      ctx.textAlign = 'center';
+      ctx.fillText('刮开此处', w/2, h/2 - 8);
+      ctx.font = '14px system-ui,Segoe UI,Roboto';
+      ctx.fillText('有机会抽中大奖', w/2, h/2 + 14);
+
+      // 将复合模式设置为 'destination-out' 时绘制的内容会变为透明
+      ctx.globalCompositeOperation = 'destination-out';
+    }
+
+    function pointerDown(e){
+      if(revealed) return;
+      drawing = true;
+      draw(e);
+    }
+    function pointerUp(){
+      drawing = false;
+      // 计算已刮开比例
+      setTimeout(checkReveal, 50);
+    }
+    function getLocalPos(e){
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
+      const y = (e.clientY ?? (e.touches && e.touches[0].clientY)) - rect.top;
+      return {x,y};
+    }
+
+    function draw(e){
+      if(!drawing || revealed) return;
+      e.preventDefault();
+      const p = getLocalPos(e);
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      // 使用圆形刷子，保证触摸与鼠标流畅
+      ctx.arc(p.x, p.y, 22, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    function checkReveal(){
+      // 计算透明像素占比
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      try{
+        const img = ctx.getImageData(0,0,w,h);
+        let cleared = 0;
+        for(let i=3;i<img.data.length;i+=4){
+          if(img.data[i] === 0) cleared++;
+        }
+        const total = (img.data.length/4);
+        const pct = Math.round((cleared/total)*100);
+        status.textContent = `已刮开：${pct}%`;
+        if(pct >= 60){
+          revealAll();
+        }
+      }catch(err){
+        // 读取像素可能被安全策略限制，但一般在本地文件运行是允许的
+        console.warn('无法访问像素数据', err);
+      }
+    }
+
+    function revealAll(){
+      if(revealed) return;
+      revealed = true;
+      // 平滑淡出覆盖层
+      canvas.style.transition = 'opacity 600ms ease';
+      canvas.style.opacity = '0';
+      setTimeout(()=>{
+        canvas.remove();
+        status.textContent = '已全部揭晓';
+      }, 650);
+    }
+
+    // 绑定事件（支持 pointer events）
+    canvas.addEventListener('pointerdown', pointerDown);
+    window.addEventListener('pointerup', pointerUp);
+    canvas.addEventListener('pointermove', draw);
+
+    // 触屏兼容：prevent default 滑动
+    canvas.addEventListener('touchstart', e=>e.preventDefault(), {passive:false});
+
+    // 按钮
+    resetBtn.addEventListener('click', ()=>{
+      // 重置
+      revealed = false;
+      if(!document.body.contains(canvas)){
+        // 重新插入 canvas
+        const newCanvas = document.createElement('canvas');
+        newCanvas.id = 'mask';
+        newCanvas.style.position = 'absolute';
+        newCanvas.style.inset = '0';
+        newCanvas.style.width = '100%';
+        newCanvas.style.height = '100%';
+        newCanvas.style.borderRadius = '8px';
+        card.appendChild(newCanvas);
+        // 重新绑定变量与事件
+        canvas = document.getElementById('mask');
+        ctx = canvas.getContext('2d');
+        canvas.addEventListener('pointerdown', pointerDown);
+        window.addEventListener('pointerup', pointerUp);
+        canvas.addEventListener('pointermove', draw);
+      }
+      pickPrize();
+      resizeCanvas();
+      canvas.style.opacity = '1';
+      status.textContent = '已刮开：0%';
+    });
+
+    revealBtn.addEventListener('click', ()=>{
+      revealAll();
+    });
+
+    // 初始化
+    pickPrize();
+    // resize after DOM and fonts
+    window.addEventListener('load', ()=>{ resizeCanvas(); });
+    window.addEventListener('resize', ()=>{ resizeCanvas(); });
+
+    // 防止变量覆盖问题 - 优雅方式重新获得引用
+    (function bindCanvasRefs(){
+      // 将 canvas、ctx 可变
+      let c = document.getElementById('mask');
+      if(!c){
+        c = document.createElement('canvas');
+        c.id = 'mask';
+        card.appendChild(c);
+      }
+    })();
+  </script>
+</body>
+</html>
