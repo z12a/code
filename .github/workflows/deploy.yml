@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies (if package.json exists)
+        run: |
+          if [ -f package.json ]; then
+            echo "package.json found — installing dependencies"
+            npm ci
+          else
+            echo "no package.json — skip npm install"
+          fi
+
+      - name: Build (if build script exists)
+        run: |
+          if [ -f package.json ]; then
+            echo "Attempting build (if present)"
+            npm run build --if-present
+          else
+            echo "no package.json — skip build"
+          fi
+
+      - name: Determine publish directory
+        run: |
+          if [ -d dist ]; then
+            echo "PUBLISH_DIR=dist" >> $GITHUB_ENV
+          elif [ -d docs ]; then
+            echo "PUBLISH_DIR=docs" >> $GITHUB_ENV
+          elif [ -f index.html ]; then
+            echo "PUBLISH_DIR=." >> $GITHUB_ENV
+          else
+            echo "No publishable directory found (no 'dist', 'docs', or 'index.html')"
+            exit 1
+          fi
+
+      - name: Show publish dir
+        run: |
+          echo "Publishing from: $PUBLISH_DIR"
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ env.PUBLISH_DIR }}
+          publish_branch: gh-pages
+          commit_message: "auto: deploy to gh-pages (GitHub Actions)"
+          keep_files: false

@@ -40,4 +40,19 @@ npm run dev
 npm run server
 ```
 
+## GitHub Actions 自动部署到 gh-pages（CI 构建，免本地 npm）
+
+如果你希望在不在本地安装 npm 的情况下自动部署到 GitHub Pages，可以使用仓库内的 GitHub Actions 工作流 `.github/workflows/deploy.yml`。它会在 push 到 `main` 或手动触发时：
+
+- 如果仓库有 `package.json`，它会运行 `npm ci` 并执行 `npm run build --if-present`（常见的 Vite 构建输出目录为 `dist`）。
+- 自动检测并发布目录：`dist`（优先）或 `docs`；如果两者都不存在且仓库根目录有 `index.html`，则会发布根目录。
+
+使用方法：
+1. 确保构建产物位于 `dist/`（或把静态文件放到 `docs/`），或者仓库根目录包含可直接访问的 `index.html`。
+2. Push 到 `main` 分支，或在仓库页面的 Actions → 选择 `Deploy to GitHub Pages` 手动触发。
+
+部署目标分支为 `gh-pages`（由工作流自动推送），你可以在 GitHub 仓库设置 → Pages 中将 Source 设置为 `gh-pages` 分支，或者等待 Pages 自动生效。
+
+备注：该工作流让你本地无需安装 npm，所有构建都在 GitHub Actions 上执行。
+
 前端会在揭晓后提供「申请兑奖」按钮，创建兑换码并保存到本地历史，演示完整流程。
